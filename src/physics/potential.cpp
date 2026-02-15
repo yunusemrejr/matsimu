@@ -1,11 +1,13 @@
 #include <matsimu/physics/potential.hpp>
 #include <algorithm>
+#include <cmath>
 
 namespace matsimu {
 
 // Lennard-Jones implementation
 LennardJones::LennardJones(Real epsilon, Real sigma, Real cutoff)
     : epsilon_(epsilon), sigma_(sigma), cutoff_sq_(cutoff * cutoff) {
+    if (cutoff_sq_ <= 0.0) cutoff_sq_ = 1e-30;  // Guard against division by zero in shift
     sigma_sq_ = sigma_ * sigma_;
     sigma_6_ = sigma_sq_ * sigma_sq_ * sigma_sq_;
     sigma_12_ = sigma_6_ * sigma_6_;
@@ -18,7 +20,7 @@ LennardJones::LennardJones(Real epsilon, Real sigma, Real cutoff)
 }
 
 Real LennardJones::energy(Real r2) const {
-    if (r2 >= cutoff_sq_) return 0.0;
+    if (!std::isfinite(r2) || r2 <= 1e-30 || r2 >= cutoff_sq_) return 0.0;
     
     Real r2_inv = sigma_sq_ / r2;
     Real r6_inv = r2_inv * r2_inv * r2_inv;
@@ -28,7 +30,7 @@ Real LennardJones::energy(Real r2) const {
 }
 
 Real LennardJones::force_div_r(Real r2) const {
-    if (r2 >= cutoff_sq_) return 0.0;
+    if (!std::isfinite(r2) || r2 <= 1e-30 || r2 >= cutoff_sq_) return 0.0;
     
     Real r2_inv = sigma_sq_ / r2;
     Real r6_inv = r2_inv * r2_inv * r2_inv;
@@ -47,7 +49,7 @@ HarmonicPotential::HarmonicPotential(Real k, Real r0, Real cutoff)
     : k_(k), r0_(r0), cutoff_sq_(cutoff * cutoff) {}
 
 Real HarmonicPotential::energy(Real r2) const {
-    if (r2 >= cutoff_sq_) return 0.0;
+    if (!std::isfinite(r2) || r2 < 0.0 || r2 >= cutoff_sq_) return 0.0;
     
     Real r = std::sqrt(r2);
     Real dr = r - r0_;
@@ -55,7 +57,7 @@ Real HarmonicPotential::energy(Real r2) const {
 }
 
 Real HarmonicPotential::force_div_r(Real r2) const {
-    if (r2 >= cutoff_sq_) return 0.0;
+    if (!std::isfinite(r2) || r2 < 0.0 || r2 >= cutoff_sq_) return 0.0;
     
     Real r = std::sqrt(r2);
     if (r < 1e-30) return 0.0;  // Avoid singularity at r=0

@@ -2,6 +2,7 @@
 
 #include <matsimu/core/types.hpp>
 #include <matsimu/lattice/lattice.hpp>
+#include <matsimu/alloc/bounded_allocator.hpp>
 #include <vector>
 #include <memory>
 
@@ -36,9 +37,16 @@ struct Particle {
  */
 class ParticleSystem {
 public:
-    ParticleSystem() = default;
-    explicit ParticleSystem(std::size_t n) : particles_(n) {}
+    using ParticleAllocator = bounded_allocator<Particle>;
     
+    /// Construct with a default limit of 1GB for particles (approx 12M particles)
+    explicit ParticleSystem(std::size_t max_bytes = 1024 * 1024 * 1024) 
+        : particles_(ParticleAllocator(max_bytes)) {}
+        
+    /// Construct with initial size and a default limit
+    ParticleSystem(std::size_t n, std::size_t max_bytes = 1024 * 1024 * 1024) 
+        : particles_(n, Particle(), ParticleAllocator(max_bytes)) {}
+
     /// Add a particle to the system
     void add_particle(const Particle& p) {
         particles_.push_back(p);
@@ -82,11 +90,12 @@ public:
     void apply_pbc(const Lattice& lattice);
     
     /// Access underlying container
-    const std::vector<Particle>& particles() const { return particles_; }
-    std::vector<Particle>& particles() { return particles_; }
+    const std::vector<Particle, ParticleAllocator>& particles() const { return particles_; }
+    std::vector<Particle, ParticleAllocator>& particles() { return particles_; }
     
 private:
-    std::vector<Particle> particles_;
+    std::vector<Particle, ParticleAllocator> particles_;
 };
+
 
 } // namespace matsimu

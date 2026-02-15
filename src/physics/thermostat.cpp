@@ -47,6 +47,8 @@ AndersenThermostat::AndersenThermostat(Real target_T, Real nu, unsigned seed)
     impl_ = std::make_unique<Impl>(seed);
 }
 
+AndersenThermostat::~AndersenThermostat() = default;
+
 void AndersenThermostat::apply(ParticleSystem& system, Real dt) {
     // Collision probability per particle per timestep
     Real prob = 1.0 - std::exp(-nu_ * dt);
@@ -63,6 +65,15 @@ void AndersenThermostat::apply(ParticleSystem& system, Real dt) {
             p.vel[2] = sigma * impl_->dist_(impl_->gen_);
         }
     }
+}
+
+
+Real AndersenThermostat::target_temperature() const {
+    return target_T_;
+}
+
+void AndersenThermostat::set_target_temperature(Real T) {
+    target_T_ = T;
 }
 
 } // namespace matsimu

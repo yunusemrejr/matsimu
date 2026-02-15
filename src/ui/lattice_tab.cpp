@@ -4,16 +4,17 @@
 #include <QLabel>
 #include <QGridLayout>
 #include <QVBoxLayout>
-#include <QMessageBox> // For QMessageBox
 #include <QSignalBlocker>
 
 namespace matsimu {
 
 LatticeTab::LatticeTab(QWidget* parent) : QWidget(parent) {
+  lattice_.a1[0] = 1.0; lattice_.a1[1] = 0.0; lattice_.a1[2] = 0.0;
+  lattice_.a2[0] = 0.0; lattice_.a2[1] = 1.0; lattice_.a2[2] = 0.0;
+  lattice_.a3[0] = 0.0; lattice_.a3[1] = 0.0; lattice_.a3[2] = 1.0;
   build_ui();
-  // Call update_volume_label initially to display volume for default lattice,
-  // and it will implicitly call sync_from_ui which now includes validation.
-  update_volume_label(); 
+  ui_ready_ = true;
+  update_volume_label();
 }
 
 LatticeTab::~LatticeTab() = default;
@@ -25,12 +26,12 @@ Lattice LatticeTab::lattice() const {
 }
 
 void LatticeTab::set_lattice(const Lattice& lat) {
-  // Before setting, validate the incoming lattice (e.g. from file load or reset)
   auto validation_error = lat.validate();
   if (validation_error) {
-    QMessageBox::warning(this, tr("Invalid Lattice"),
-                         tr("The provided lattice is invalid: %1").arg(QString::fromStdString(*validation_error)));
-    return; // Do not set invalid lattice
+    if (label_volume_) {
+      label_volume_->setText(tr("Cell volume: invalid (%1)").arg(QString::fromStdString(*validation_error)));
+    }
+    return;
   }
 
   lattice_ = lat;
@@ -55,7 +56,12 @@ void LatticeTab::set_lattice(const Lattice& lat) {
     a3_[2]->setValue(lat.a3[2]);
   }
   update_volume_label();
-  emit lattice_changed(lattice_); // Emit signal after setting valid lattice
+  emit lattice_changed(lattice_);
+}
+
+void LatticeTab::set_editing_enabled(bool enabled) {
+  if (basis_group_)
+    basis_group_->setEnabled(enabled);
 }
 
 void LatticeTab::build_ui() {
@@ -85,12 +91,12 @@ void LatticeTab::build_ui() {
   auto mk_spin = [this](Real val) {
     auto* s = new QDoubleSpinBox(this);
     s->setRange(-1e6, 1e6);
-    s->setDecimals(4);
+    s->setDecimals(12);
     s->setValue(val);
-    s->setSingleStep(1e-2);
+    s->setSingleStep(1e-11);
     connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, [this]() { 
-              sync_from_ui(); // This now performs validation and emits if valid
+            this, [this]() {
+              sync_from_ui();
             });
     return s;
   };
@@ -144,8 +150,12 @@ void LatticeTab::assign_spinbox_values_to_vector(Real target_array[3], QDoubleSp
 }
 
 void LatticeTab::sync_from_ui() {
-  if (!a1_[0]) return;
-  Lattice current_input_lattice; // Create a temporary lattice from UI values
+  if (!ui_ready_ || !a1_[0] || !a1_[1] || !a1_[2] ||
+      !a2_[0] || !a2_[1] || !a2_[2] ||
+      !a3_[0] || !a3_[1] || !a3_[2]) {
+    return;
+  }
+  Lattice current_input_lattice;
 
   assign_spinbox_values_to_vector(current_input_lattice.a1, a1_);
   assign_spinbox_values_to_vector(current_input_lattice.a2, a2_);
@@ -156,19 +166,15 @@ void LatticeTab::sync_from_ui() {
     if (label_volume_) {
       label_volume_->setText(tr("Cell volume: invalid (%1)").arg(QString::fromStdString(*validation_error)));
     }
-    // Do not update internal lattice_ or emit signal while current edit is invalid.
     return;
   }
-  
-  // If valid, update internal lattice_ and then proceed
+
   lattice_ = current_input_lattice;
   update_volume_label();
   emit lattice_changed(lattice_);
 }
 
 void LatticeTab::update_volume_label() {
-  // Do not call sync_from_ui() here anymore, it's called from QDoubleSpinBox::valueChanged signal.
-  // This function now just updates the label based on the already validated `lattice_`.
   if (label_volume_) {
     auto validation_error = lattice_.validate();
     if (validation_error) {

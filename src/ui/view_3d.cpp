@@ -25,6 +25,12 @@ void View3D::set_lattice(const Lattice& lat) {
 
 void View3D::set_particle_system(std::shared_ptr<const ParticleSystem> system) {
   particle_system_ = std::move(system);
+  // When showing particles, clear temperature field so paintGL draws particles not heat map.
+  if (particle_system_ && !particle_system_->empty()) {
+    temp_field_.clear();
+    temp_nx_ = 0;
+    temp_ny_ = 0;
+  }
   update();
 }
 
@@ -328,14 +334,20 @@ void View3D::draw_particles() {
   float max_p[3] = { -std::numeric_limits<float>::max(),
                      -std::numeric_limits<float>::max(),
                      -std::numeric_limits<float>::max() };
+  std::size_t finite_count = 0;
   for (std::size_t i = 0; i < particle_system_->size(); ++i) {
     const auto& p = (*particle_system_)[i];
     if (!std::isfinite(p.pos[0]) || !std::isfinite(p.pos[1]) || !std::isfinite(p.pos[2])) continue;
+    ++finite_count;
     const float px = static_cast<float>(p.pos[0]);
     const float py = static_cast<float>(p.pos[1]);
     const float pz = static_cast<float>(p.pos[2]);
     min_p[0] = std::min(min_p[0], px); min_p[1] = std::min(min_p[1], py); min_p[2] = std::min(min_p[2], pz);
     max_p[0] = std::max(max_p[0], px); max_p[1] = std::max(max_p[1], py); max_p[2] = std::max(max_p[2], pz);
+  }
+  if (finite_count == 0) {
+    if (show_lattice_) draw_lattice_cell();
+    return;
   }
 
   const float cx = 0.5f * (min_p[0] + max_p[0]);
@@ -403,7 +415,7 @@ void View3D::draw_particles() {
 
   // --- Draw particles as color-coded points ---
   glEnable(GL_POINT_SMOOTH);
-  glPointSize(std::max(5.0f, particle_radius_ * 120.0f));
+  glPointSize(std::max(8.0f, particle_radius_ * 140.0f));
 
   glBegin(GL_POINTS);
   for (std::size_t i = 0; i < particle_system_->size(); ++i) {
@@ -423,7 +435,7 @@ void View3D::draw_particles() {
   glDisable(GL_POINT_SMOOTH);
 
   // --- Draw wireframe spheres for 3D depth perception ---
-  const float sphere_r = std::max(0.015f, particle_radius_ * 0.35f);
+  const float sphere_r = std::max(0.022f, particle_radius_ * 0.5f);
   for (std::size_t i = 0; i < particle_system_->size(); ++i) {
     const auto& p = (*particle_system_)[i];
     if (std::isfinite(p.pos[0]) && std::isfinite(p.pos[1]) && std::isfinite(p.pos[2])) {

@@ -2,6 +2,7 @@
 
 #include <matsimu/core/types.hpp>
 #include <matsimu/sim/model.hpp>
+#include <matsimu/alloc/bounded_allocator.hpp>
 #include <vector>
 #include <string>
 #include <optional>
@@ -69,7 +70,10 @@ struct HeatDiffusion2DParams {
  */
 class HeatDiffusion2DModel : public ISimModel {
 public:
-    explicit HeatDiffusion2DModel(const HeatDiffusion2DParams& params);
+    using HeatAllocator = bounded_allocator<Real>;
+
+    explicit HeatDiffusion2DModel(const HeatDiffusion2DParams& params,
+                                  std::size_t max_bytes = 512 * 1024 * 1024);
 
     bool step() override;
     bool finished() const override;
@@ -79,7 +83,7 @@ public:
     bool is_valid() const override;
 
     /// Temperature field [K] at current time (row-major, read-only).
-    const std::vector<Real>& temperature() const { return T_; }
+    const std::vector<Real, HeatAllocator>& temperature() const { return T_; }
 
     /// Grid dimensions.
     std::size_t nx() const { return nx_; }
@@ -93,8 +97,8 @@ private:
     HeatDiffusion2DParams params_;
     std::size_t nx_{0};
     std::size_t ny_{0};
-    std::vector<Real> T_;
-    std::vector<Real> T_next_;
+    std::vector<Real, HeatAllocator> T_;
+    std::vector<Real, HeatAllocator> T_next_;
     Real time_{0};
     std::size_t step_count_{0};
     std::string error_msg_;
@@ -103,7 +107,8 @@ private:
     void initialize();
     void apply_initial_condition_hot_center();
     void apply_initial_condition_uniform_hot();
-    void apply_boundary_conditions(std::vector<Real>& field);
+    void apply_boundary_conditions(std::vector<Real, HeatAllocator>& field);
 };
+
 
 }  // namespace matsimu

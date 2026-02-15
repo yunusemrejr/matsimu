@@ -22,6 +22,9 @@ class LatticeTab : public QWidget {
   Lattice lattice() const;
   void set_lattice(const Lattice& lat);
 
+  /** Enable or disable editing of basis vectors (e.g. disabled while simulation runs). */
+  void set_editing_enabled(bool enabled);
+
  signals:
   void lattice_changed(const matsimu::Lattice& lat);
 
@@ -37,6 +40,7 @@ class LatticeTab : public QWidget {
   QDoubleSpinBox* a3_[3]{nullptr, nullptr, nullptr};
   QLabel* label_volume_{nullptr};
   Lattice lattice_;
+  bool ui_ready_{false};
 };
 
 }  // namespace matsimu

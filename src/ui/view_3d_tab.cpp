@@ -1,6 +1,7 @@
 #include <matsimu/ui/view_3d_tab.hpp>
 #include <matsimu/ui/view_3d.hpp>
 #include <QLabel>
+#include <QString>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -43,6 +44,7 @@ View3DTab::View3DTab(QWidget* parent) : QWidget(parent) {
 
   view_ = new View3D(this);
   view_->setMinimumSize(700, 520);
+  view_->reset_view();  // Sensible initial camera angle instead of (0,0) edge-on
   layout->addWidget(view_);
   layout->setStretch(layout->count() - 1, 1);
 }
@@ -53,6 +55,12 @@ void View3DTab::set_lattice(const Lattice& lat) {
   if (view_)
     view_->set_lattice(lat);
   if (lattice_info_) {
+    const auto validation_error = lat.validate();
+    if (validation_error) {
+      lattice_info_->setText(tr("Lattice: invalid (%1)")
+                                 .arg(QString::fromStdString(*validation_error)));
+      return;
+    }
     auto mag = [](const Real v[3]) -> Real {
       return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
     };

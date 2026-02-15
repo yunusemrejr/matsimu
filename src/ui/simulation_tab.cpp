@@ -28,8 +28,10 @@ void SimulationTab::set_running(bool running) {
   running_ = running;
   if (btn_run_) btn_run_->setEnabled(!running);
   if (btn_stop_) btn_stop_->setEnabled(running);
+  if (btn_reset_) btn_reset_->setEnabled(!running);
   if (btn_example_) btn_example_->setEnabled(!running);
   if (combo_examples_) combo_examples_->setEnabled(!running);
+  if (params_group_) params_group_->setEnabled(!running);
 }
 
 void SimulationTab::set_time(Real t) {
@@ -41,6 +43,11 @@ void SimulationTab::set_params(const SimulationParams& p) {
   if (spin_dx_) spin_dx_->setValue(p.dx);
   if (spin_dt_) spin_dt_->setValue(p.dt);
   if (spin_end_time_) spin_end_time_->setValue(p.end_time);
+}
+
+QString SimulationTab::selected_example_id() const {
+  if (!combo_examples_) return QString();
+  return combo_examples_->currentData().toString();
 }
 
 void SimulationTab::build_ui() {
@@ -64,7 +71,7 @@ void SimulationTab::build_ui() {
   grid->addWidget(new QLabel(tr("Grid spacing Δx (m):")), 0, 0);
   spin_dx_ = new QDoubleSpinBox(this);
   spin_dx_->setRange(1e-12, 1e-2);
-  spin_dx_->setDecimals(4);
+  spin_dx_->setDecimals(12);
   spin_dx_->setValue(1e-9);
   spin_dx_->setSingleStep(1e-10);
   spin_dx_->setToolTip(tr("Distance between sample points. 1e-10 m is about one angstrom (atomic scale)."));
@@ -73,7 +80,7 @@ void SimulationTab::build_ui() {
   grid->addWidget(new QLabel(tr("Time step Δt (s):")), 1, 0);
   spin_dt_ = new QDoubleSpinBox(this);
   spin_dt_->setRange(1e-18, 1e-6);
-  spin_dt_->setDecimals(4);
+  spin_dt_->setDecimals(18);
   spin_dt_->setValue(1e-15);
   spin_dt_->setSingleStep(1e-16);
   spin_dt_->setToolTip(tr("Time jump per update, like frame interval in a slow-motion video. Smaller Δt is steadier but needs more steps."));
@@ -82,7 +89,7 @@ void SimulationTab::build_ui() {
   grid->addWidget(new QLabel(tr("End time (s):")), 2, 0);
   spin_end_time_ = new QDoubleSpinBox(this);
   spin_end_time_->setRange(0, 1e6);
-  spin_end_time_->setDecimals(4);
+  spin_end_time_->setDecimals(9);
   spin_end_time_->setValue(0.0);
   spin_end_time_->setToolTip(tr("Total simulated duration. Set to 0 to run continuously until you press Stop."));
   grid->addWidget(spin_end_time_, 2, 1);
@@ -92,10 +99,12 @@ void SimulationTab::build_ui() {
   auto* examples_group = new QGroupBox(tr("One-click examples"), this);
   auto* examples_row = new QHBoxLayout(examples_group);
   combo_examples_ = new QComboBox(this);
+  combo_examples_->addItem(tr("— Use parameters below —"), QString());
   combo_examples_->addItem(tr("Argon Crystal Relaxation (dense)"), QString("argon_crystal"));
   combo_examples_->addItem(tr("Thermal Shock (colliding clusters)"), QString("thermal_shock"));
   combo_examples_->addItem(tr("Heat Diffusion: Hot Center (copper)"), QString("heat_hot_center"));
   combo_examples_->addItem(tr("Heat Diffusion: Quenching (steel)"), QString("heat_quench"));
+  combo_examples_->setCurrentIndex(0);  // Default: no example, so first Run uses spinbox params
   combo_examples_->setToolTip(tr("Prebuilt simulations: atomic dynamics and continuum heat diffusion."));
   btn_example_ = new QPushButton(tr("Run Example"), this);
   btn_example_->setObjectName("runButton");
@@ -103,6 +112,9 @@ void SimulationTab::build_ui() {
   connect(btn_example_, &QPushButton::clicked, this, &SimulationTab::on_example_clicked);
   examples_row->addWidget(combo_examples_, 1);
   examples_row->addWidget(btn_example_);
+  connect(combo_examples_, &QComboBox::currentIndexChanged, this, [this](int index) {
+    emit example_selection_changed(combo_examples_->itemData(index).toString());
+  });
   layout->addWidget(examples_group);
 
   btn_run_ = new QPushButton(tr("Run"), this);
@@ -149,7 +161,12 @@ void SimulationTab::on_reset_clicked() {
 
 void SimulationTab::on_example_clicked() {
   if (!combo_examples_) return;
-  emit example_requested(combo_examples_->currentData().toString());
+  const QString example_id = combo_examples_->currentData().toString();
+  if (example_id.isEmpty()) {
+    emit status_message(tr("No example selected or example data missing. Please select an example from the list."));
+    return;
+  }
+  emit example_requested(example_id);
 }
 
 }  // namespace matsimu

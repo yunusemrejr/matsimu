@@ -43,20 +43,33 @@ std::size_t NeighborList::build(const ParticleSystem& system, const Lattice* lat
     return num_pairs_;
 }
 
-bool NeighborList::needs_rebuild(const ParticleSystem& system) const {
+bool NeighborList::needs_rebuild(const ParticleSystem& system, const Lattice* lattice) const {
     if (system.size() != last_positions_.size()) return true;
     
     for (std::size_t i = 0; i < system.size(); ++i) {
-        Real dx = system[i].pos[0] - last_positions_[i][0];
-        Real dy = system[i].pos[1] - last_positions_[i][1];
-        Real dz = system[i].pos[2] - last_positions_[i][2];
-        Real dr2 = dx*dx + dy*dy + dz*dz;
+        Real dx[3];
+        dx[0] = system[i].pos[0] - last_positions_[i][0];
+        dx[1] = system[i].pos[1] - last_positions_[i][1];
+        dx[2] = system[i].pos[2] - last_positions_[i][2];
         
+        if (lattice) {
+            // Check drift using min-image to ignore periodic wraps
+            Real frac[3];
+            lattice->cartesian_to_fractional(dx, frac);
+            // We want the displacement from the origin in fractional space, wrapped to [-0.5, 0.5]
+            for (int d = 0; d < 3; ++d) {
+                frac[d] = frac[d] - std::round(frac[d]);
+            }
+            lattice->fractional_to_cartesian(frac, dx);
+        }
+        
+        Real dr2 = dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2];
         if (dr2 > skin_half_sq_) return true;
     }
     
     return false;
 }
+
 
 void NeighborList::clear() {
     neighbors_.clear();
@@ -84,14 +97,14 @@ NeighborForceField::NeighborForceField(std::shared_ptr<Potential> potential,
     : potential_(std::move(potential)), nlist_(cutoff, skin) {}
 
 Real NeighborForceField::compute_forces(ParticleSystem& system, const Lattice* lattice) {
-    if (nlist_.needs_rebuild(system)) {
+    if (nlist_.needs_rebuild(system, lattice)) {
         nlist_.build(system, lattice);
     }
     return compute_forces_internal(system, lattice);
 }
 
 Real NeighborForceField::compute_energy(const ParticleSystem& system, const Lattice* lattice) {
-    if (nlist_.needs_rebuild(system)) {
+    if (nlist_.needs_rebuild(system, lattice)) {
         nlist_.build(system, lattice);
     }
     

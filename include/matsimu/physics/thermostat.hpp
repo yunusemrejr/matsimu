@@ -72,11 +72,12 @@ public:
      * @param seed Random seed (0 = use random device)
      */
     AndersenThermostat(Real target_T, Real nu, unsigned seed = 0);
+    ~AndersenThermostat() override;
     
     void apply(ParticleSystem& system, Real dt) override;
     
-    Real target_temperature() const override { return target_T_; }
-    void set_target_temperature(Real T) override { target_T_ = T; }
+    Real target_temperature() const override;
+    void set_target_temperature(Real T) override;
     
     Real collision_frequency() const { return nu_; }
     void set_collision_frequency(Real nu) { nu_ = nu; }

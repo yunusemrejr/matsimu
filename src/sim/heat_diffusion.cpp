@@ -29,8 +29,9 @@ std::optional<std::string> HeatDiffusionParams::validate() const {
   return std::nullopt;
 }
 
-HeatDiffusionModel::HeatDiffusionModel(const HeatDiffusionParams& params)
-    : params_(params), n_(params.n_cells) {
+HeatDiffusionModel::HeatDiffusionModel(const HeatDiffusionParams& params, std::size_t max_bytes)
+    : params_(params), n_(params.n_cells), 
+      T_(HeatAllocator(max_bytes)), T_next_(T_.get_allocator()) {
   auto err = params_.validate();
   if (err) {
     error_msg_ = *err;

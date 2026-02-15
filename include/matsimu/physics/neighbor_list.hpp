@@ -55,9 +55,10 @@ public:
      * Compares current positions with positions at last build.
      * 
      * @param system Particle system
+     * @param lattice Lattice for periodic boundaries
      * @return true if any particle moved more than skin/2
      */
-    bool needs_rebuild(const ParticleSystem& system) const;
+    bool needs_rebuild(const ParticleSystem& system, const Lattice* lattice = nullptr) const;
     
     /// Access neighbors of particle i
     const std::vector<std::size_t>& neighbors(std::size_t i) const {

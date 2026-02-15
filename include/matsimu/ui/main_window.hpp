@@ -31,6 +31,7 @@ class MainWindow : public QMainWindow {
   void setup_status_bar();
   void on_run();
   void on_run_example(const QString& example_id);
+  void update_ui_for_example(const QString& example_id);
   void on_stop();
   void on_reset();
   void on_about();

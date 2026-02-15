@@ -14,8 +14,9 @@ Real Lattice::volume() const {
 
 void Lattice::min_image_frac(Real frac[3]) const {
   for (int i = 0; i < 3; ++i) {
-    while (frac[i] >= 0.5) frac[i] -= 1.0;
-    while (frac[i] < -0.5) frac[i] += 1.0;
+    frac[i] = std::fmod(frac[i], 1.0);
+    if (frac[i] >= 0.5) frac[i] -= 1.0;
+    else if (frac[i] < -0.5) frac[i] += 1.0;
   }
 }
 

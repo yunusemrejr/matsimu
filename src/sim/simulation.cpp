@@ -4,6 +4,20 @@
 
 namespace matsimu {
 
+namespace {
+bool has_non_finite_particle_state(const ParticleSystem& system) {
+    for (const auto& p : system.particles()) {
+        if (!std::isfinite(p.mass) || p.mass <= 0.0) return true;
+        for (int d = 0; d < 3; ++d) {
+            if (!std::isfinite(p.pos[d]) || !std::isfinite(p.vel[d]) || !std::isfinite(p.force[d])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+}  // namespace
+
 std::optional<std::string> SimulationParams::validate() const {
     if (!std::isfinite(dt) || dt <= 0.0) {
         return "Time step 'dt' must be positive and finite.";
@@ -146,6 +160,11 @@ bool Simulation::step() {
         error_msg_ = "Maximum step count reached";
         return false;
     }
+    if (!integrator_) {
+        error_msg_ = "No integrator set";
+        valid_ = false;
+        return false;
+    }
 
     integrator_->step1(system_);
     if (has_lattice())
@@ -154,6 +173,12 @@ bool Simulation::step() {
     integrator_->step2(system_);
     if (thermostat_)
         thermostat_->apply(system_, params_.dt);
+
+    if (has_non_finite_particle_state(system_)) {
+        error_msg_ = "Particle state became non-finite";
+        valid_ = false;
+        return false;
+    }
 
     time_ += params_.dt;
     ++step_count_;

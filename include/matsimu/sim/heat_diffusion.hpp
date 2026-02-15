@@ -2,6 +2,7 @@
 
 #include <matsimu/core/types.hpp>
 #include <matsimu/sim/model.hpp>
+#include <matsimu/alloc/bounded_allocator.hpp>
 #include <vector>
 #include <string>
 #include <optional>
@@ -35,7 +36,10 @@ struct HeatDiffusionParams {
  */
 class HeatDiffusionModel : public ISimModel {
 public:
-  explicit HeatDiffusionModel(const HeatDiffusionParams& params);
+  using HeatAllocator = bounded_allocator<Real>;
+
+  explicit HeatDiffusionModel(const HeatDiffusionParams& params, 
+                              std::size_t max_bytes = 256 * 1024 * 1024);
 
   bool step() override;
   bool finished() const override;
@@ -45,15 +49,15 @@ public:
   bool is_valid() const override;
 
   /// Temperature field [K] at current time (read-only).
-  const std::vector<Real>& temperature() const { return T_; }
+  const std::vector<Real, HeatAllocator>& temperature() const { return T_; }
   /// Number of grid points.
   std::size_t n_cells() const { return n_; }
 
 private:
   HeatDiffusionParams params_;
   std::size_t n_{0};
-  std::vector<Real> T_;
-  std::vector<Real> T_next_;
+  std::vector<Real, HeatAllocator> T_;
+  std::vector<Real, HeatAllocator> T_next_;
   Real time_{0};
   std::size_t step_count_{0};
   std::string error_msg_;
@@ -61,5 +65,6 @@ private:
 
   void initialize();
 };
+
 
 }  // namespace matsimu

@@ -24,6 +24,8 @@ class SimulationTab : public QWidget {
   ~SimulationTab() override;
 
   SimulationParams params() const;
+  /** Returns the example id of the currently selected one-click example, or empty string if none. */
+  QString selected_example_id() const;
   bool is_running() const { return running_; }
 
  signals:
@@ -31,6 +33,7 @@ class SimulationTab : public QWidget {
   void stop_requested();
   void reset_requested();
   void example_requested(const QString& example_id);
+  void example_selection_changed(const QString& example_id);
   void status_message(const QString& msg);
 
  public slots:

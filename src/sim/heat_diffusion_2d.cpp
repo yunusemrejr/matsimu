@@ -49,33 +49,34 @@ std::optional<std::string> HeatDiffusion2DParams::validate() const {
 // HeatDiffusion2DModel
 // ---------------------------------------------------------------------------
 
-HeatDiffusion2DModel::HeatDiffusion2DModel(const HeatDiffusion2DParams& params)
-    : params_(params), nx_(params.nx), ny_(params.ny) {
+HeatDiffusion2DModel::HeatDiffusion2DModel(const HeatDiffusion2DParams& params, std::size_t max_bytes)
+    : params_(params), nx_(params.nx), ny_(params.ny),
+      T_(HeatAllocator(max_bytes)), T_next_(HeatAllocator(max_bytes)) {
 
-    auto err = params_.validate();
+    auto err = this->params_.validate();
     if (err) {
-        error_msg_ = *err;
+        this->error_msg_ = *err;
         return;
     }
 
-    T_.resize(nx_ * ny_);
-    T_next_.resize(nx_ * ny_);
-    initialize();
-    valid_ = true;
+    this->T_.resize(this->nx_ * this->ny_);
+    this->T_next_.resize(this->nx_ * this->ny_);
+    this->initialize();
+    this->valid_ = true;
 }
 
 void HeatDiffusion2DModel::initialize() {
-    switch (params_.ic) {
+    switch (this->params_.ic) {
         case HeatIC2D::HotCenter:
-            apply_initial_condition_hot_center();
+            this->apply_initial_condition_hot_center();
             break;
         case HeatIC2D::UniformHot:
-            apply_initial_condition_uniform_hot();
+            this->apply_initial_condition_uniform_hot();
             break;
     }
     // Enforce Dirichlet boundaries on initial state.
-    apply_boundary_conditions(T_);
-    T_next_ = T_;
+    this->apply_boundary_conditions(this->T_);
+    this->T_next_ = this->T_;
 }
 
 void HeatDiffusion2DModel::apply_initial_condition_hot_center() {
@@ -83,31 +84,31 @@ void HeatDiffusion2DModel::apply_initial_condition_hot_center() {
     // T(x,y) = T_boundary + (T_hot - T_boundary) * exp(-r²/(2σ²))
     // where r = distance from center in fractional coords [0,1]×[0,1],
     //       σ = hot_radius_frac.
-    const Real sigma = params_.hot_radius_frac;
+    const Real sigma = this->params_.hot_radius_frac;
     const Real inv_2sigma2 = 1.0 / (2.0 * sigma * sigma);
-    const Real T_delta = params_.T_hot - params_.T_boundary;
+    const Real T_delta = this->params_.T_hot - this->params_.T_boundary;
 
-    for (std::size_t j = 0; j < ny_; ++j) {
-        const Real fy = (static_cast<Real>(j) + 0.5) / static_cast<Real>(ny_) - 0.5;
-        for (std::size_t i = 0; i < nx_; ++i) {
-            const Real fx = (static_cast<Real>(i) + 0.5) / static_cast<Real>(nx_) - 0.5;
+    for (std::size_t j = 0; j < this->ny_; ++j) {
+        const Real fy = (static_cast<Real>(j) + 0.5) / static_cast<Real>(this->ny_) - 0.5;
+        for (std::size_t i = 0; i < this->nx_; ++i) {
+            const Real fx = (static_cast<Real>(i) + 0.5) / static_cast<Real>(this->nx_) - 0.5;
             const Real r2 = fx * fx + fy * fy;
-            T_[j * nx_ + i] = params_.T_boundary + T_delta * std::exp(-r2 * inv_2sigma2);
+            this->T_[j * this->nx_ + i] = this->params_.T_boundary + T_delta * std::exp(-r2 * inv_2sigma2);
         }
     }
 }
 
 void HeatDiffusion2DModel::apply_initial_condition_uniform_hot() {
     // Interior: uniformly hot.  Boundary cells will be overwritten by BC.
-    std::fill(T_.begin(), T_.end(), params_.T_hot);
+    std::fill(this->T_.begin(), this->T_.end(), this->params_.T_hot);
 }
 
-void HeatDiffusion2DModel::apply_boundary_conditions(std::vector<Real>& field) {
-    const Real Tb = params_.T_boundary;
+void HeatDiffusion2DModel::apply_boundary_conditions(std::vector<Real, HeatDiffusion2DModel::HeatAllocator>& field) {
+    const Real Tb = this->params_.T_boundary;
     // Top and bottom rows.
-    for (std::size_t i = 0; i < nx_; ++i) {
+    for (std::size_t i = 0; i < this->nx_; ++i) {
         field[i] = Tb;                          // j = 0  (bottom)
-        field[(ny_ - 1) * nx_ + i] = Tb;        // j = ny-1 (top)
+        field[(this->ny_ - 1) * this->nx_ + i] = Tb;        // j = ny-1 (top)
     }
     // Left and right columns.
     for (std::size_t j = 0; j < ny_; ++j) {
@@ -127,10 +128,10 @@ bool HeatDiffusion2DModel::step() {
     for (std::size_t j = 1; j + 1 < ny_; ++j) {
         for (std::size_t i = 1; i + 1 < nx_; ++i) {
             const std::size_t idx = j * nx_ + i;
-            T_next_[idx] = T_[idx] + r * (
-                T_[idx - 1] + T_[idx + 1] +       // x neighbors
-                T_[idx - nx_] + T_[idx + nx_] -    // y neighbors
-                4.0 * T_[idx]
+            this->T_next_[idx] = this->T_[idx] + r * (
+                this->T_[idx - 1] + this->T_[idx + 1] +       // x neighbors
+                this->T_[idx - nx_] + this->T_[idx + nx_] -    // y neighbors
+                4.0 * this->T_[idx]
             );
         }
     }

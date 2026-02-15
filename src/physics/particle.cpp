@@ -24,11 +24,13 @@ Real ParticleSystem::kinetic_energy() const {
 
 Real ParticleSystem::temperature() const {
     std::size_t n = particles_.size();
-    if (n == 0) return 0.0;
+    if (n <= 1) return 0.0;
     
     Real ekin = kinetic_energy();
-    // T = 2*E_kin / (3*N*k_B) for 3D
-    return (2.0 * ekin) / (3.0 * static_cast<Real>(n) * kB);
+    // T = 2*E_kin / (dof * k_B)
+    // For N particles with fixed COM, dof = 3*N - 3
+    Real dof = 3.0 * static_cast<Real>(n) - 3.0;
+    return (2.0 * ekin) / (dof * kB);
 }
 
 void ParticleSystem::center_of_mass(Real com[3]) const {
