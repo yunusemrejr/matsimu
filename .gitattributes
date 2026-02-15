@@ -1,0 +1,6 @@
+# On merge conflict, keep our (local) version for these paths
+include/matsimu/io/config.hpp merge=ours
+src/io/config.cpp merge=ours
+*.json merge=ours
+*.yaml merge=ours
+*.yml merge=ours
