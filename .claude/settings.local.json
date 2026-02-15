@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dpkg:*)",
+      "Bash(qmake:*)",
+      "Bash(qmake6:*)",
+      "Bash(pkg-config:*)",
+      "Bash(apt list:*)",
+      "Bash(apt-cache show:*)",
+      "Bash(apt-cache policy:*)",
+      "Bash(g++:*)",
+      "Bash(bash run.sh:*)",
+      "Bash(bash run.sh)",
+      "Bash(sudo apt install:*)"
+    ]
+  }
+}

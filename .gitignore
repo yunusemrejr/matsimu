@@ -1,0 +1,16 @@
+# Build output
+/build/
+
+# IDE / editor
+.idea/
+*.swp
+*.swo
+*~
+
+# Debug / core
+core
+*.core
+
+# OS
+.DS_Store
+Thumbs.db
