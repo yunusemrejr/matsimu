@@ -8,6 +8,7 @@
 
 #ifdef MATSIMU_USE_QT
 #include <QApplication>
+#include <QMetaObject>
 #include <matsimu/ui/main_window.hpp>
 #endif
 
@@ -18,6 +19,14 @@ const char* get_arg(int argc, char* argv[], const char* name) {
     if (std::strcmp(argv[i], name) == 0) return argv[i + 1];
   return nullptr;
 }
+
+#ifdef MATSIMU_USE_QT
+bool has_flag(int argc, char* argv[], const char* name) {
+  for (int i = 1; i < argc; ++i)
+    if (std::strcmp(argv[i], name) == 0) return true;
+  return false;
+}
+#endif
 
 void run_lattice_example() {
   matsimu::Lattice lat;
@@ -47,6 +56,7 @@ void run_heat_example() {
   std::cout << "Finished at t=" << sim.time() << " s, steps=" << sim.step_count() << "\n";
 }
 
+#ifndef MATSIMU_USE_QT
 void run_default_cli(const matsimu::SimulationParams& params) {
   matsimu::Simulation sim(params);
   if (!sim.is_valid()) {
@@ -62,6 +72,7 @@ void run_default_cli(const matsimu::SimulationParams& params) {
     std::cout << ", error: " << sim.error_message();
   std::cout << "\n";
 }
+#endif
 
 }  // namespace
 
@@ -78,8 +89,12 @@ int main(int argc, char* argv[]) {
 
 #ifdef MATSIMU_USE_QT
   QApplication app(argc, argv);
+  const bool auto_run = has_flag(argc, argv, "--autorun");
   matsimu::MainWindow win;
   win.show();
+  if (auto_run) {
+    QMetaObject::invokeMethod(&win, "on_run", Qt::QueuedConnection);
+  }
   return app.exec();
 #else
   matsimu::SimulationParams params;

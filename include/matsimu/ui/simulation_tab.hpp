@@ -8,6 +8,7 @@ class QPushButton;
 class QDoubleSpinBox;
 class QLabel;
 class QGroupBox;
+class QComboBox;
 
 namespace matsimu {
 
@@ -29,6 +30,7 @@ class SimulationTab : public QWidget {
   void run_requested();
   void stop_requested();
   void reset_requested();
+  void example_requested(const QString& example_id);
   void status_message(const QString& msg);
 
  public slots:
@@ -41,14 +43,17 @@ class SimulationTab : public QWidget {
   void on_run_clicked();
   void on_stop_clicked();
   void on_reset_clicked();
+  void on_example_clicked();
 
   QGroupBox* params_group_{nullptr};
   QDoubleSpinBox* spin_dx_{nullptr};
   QDoubleSpinBox* spin_dt_{nullptr};
   QDoubleSpinBox* spin_end_time_{nullptr};
+  QComboBox* combo_examples_{nullptr};
   QPushButton* btn_run_{nullptr};
   QPushButton* btn_stop_{nullptr};
   QPushButton* btn_reset_{nullptr};
+  QPushButton* btn_example_{nullptr};
   QLabel* label_time_{nullptr};
   bool running_{false};
 };

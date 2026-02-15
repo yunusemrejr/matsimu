@@ -8,6 +8,7 @@ class QTabWidget;
 class QStatusBar;
 class QMenuBar;
 class QWidget;
+class QString;
 
 namespace matsimu {
 
@@ -29,6 +30,7 @@ class MainWindow : public QMainWindow {
   void setup_central();
   void setup_status_bar();
   void on_run();
+  void on_run_example(const QString& example_id);
   void on_stop();
   void on_reset();
   void on_about();

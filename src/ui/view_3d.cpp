@@ -2,6 +2,7 @@
 #include <QSurfaceFormat>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 namespace matsimu {
 
@@ -32,6 +33,27 @@ void View3D::clear_particle_system() {
   update();
 }
 
+void View3D::set_temperature_field(const std::vector<Real>& T,
+                                   std::size_t nx, std::size_t ny,
+                                   Real T_cold, Real T_hot) {
+  if (T.size() != nx * ny || nx < 3 || ny < 3 || T_hot <= T_cold) return;
+  temp_field_ = T;
+  temp_nx_ = nx;
+  temp_ny_ = ny;
+  temp_T_cold_ = T_cold;
+  temp_T_hot_ = T_hot;
+  // Clear particle view when showing temperature field.
+  particle_system_.reset();
+  update();
+}
+
+void View3D::clear_temperature_field() {
+  temp_field_.clear();
+  temp_nx_ = 0;
+  temp_ny_ = 0;
+  update();
+}
+
 void View3D::set_scale(Real scale) {
   scale_ = scale;
   update();
@@ -49,6 +71,21 @@ void View3D::set_show_particles(bool show) {
 
 void View3D::set_show_lattice(bool show) {
   show_lattice_ = show;
+  update();
+}
+
+void View3D::set_simulation_state(bool running, Real time_s, Real end_time_s, std::size_t step_count) {
+  sim_running_ = running;
+  sim_time_ = std::isfinite(time_s) ? time_s : 0.0;
+  sim_end_time_ = (std::isfinite(end_time_s) && end_time_s > 0.0) ? end_time_s : 0.0;
+  sim_step_count_ = step_count;
+  update();
+}
+
+void View3D::reset_view() {
+  rot_x_ = 20.0f;
+  rot_y_ = -30.0f;
+  scale_ = 1.0;
   update();
 }
 
@@ -103,6 +140,11 @@ void View3D::paintGL() {
   glTranslatef(0.0f, 0.0f, -3.0f);
   glRotatef(rot_x_, 1.0f, 0.0f, 0.0f);
   glRotatef(rot_y_, 0.0f, 1.0f, 0.0f);
+  if (sim_running_ && (!particle_system_ || particle_system_->empty())) {
+    // Visual cue: while running, slowly spin like a turntable.
+    const float spin = static_cast<float>(std::fmod(sim_time_ * 1e15 * 8.0, 360.0));
+    glRotatef(spin, 0.0f, 1.0f, 0.0f);
+  }
   
   // Safe scale calculation with bounds checking
   float scale = 1.0f;
@@ -112,11 +154,12 @@ void View3D::paintGL() {
   glScalef(scale, scale, scale);
 
   draw_axes();
-  if (show_lattice_) {
-    draw_lattice_cell();
-  }
-  if (show_particles_ && particle_system_) {
-    draw_particles();
+  if (!temp_field_.empty() && temp_nx_ >= 3 && temp_ny_ >= 3) {
+    draw_temperature_field();
+  } else if (show_particles_ && particle_system_ && !particle_system_->empty()) {
+    draw_particles();  // Also draws simulation box in particle coordinate space
+  } else if (show_lattice_) {
+    draw_lattice_cell();  // Standalone lattice cell when no particles
   }
   
   // Ensure matrix mode is reset for next frame
@@ -147,36 +190,61 @@ void View3D::draw_lattice_cell() {
     return;  // Skip drawing invalid lattice
   }
   
-  // Use a safe, clamped scale to prevent extreme distortion
-  float s = 1.0f;
-  if (std::isfinite(scale_) && scale_ > 0.0) {
-    // Clamp scale to reasonable visual range
-    s = static_cast<float>(std::min(std::max(scale_, 1e-6), 1e6));
-  }
+  // Auto-fit the full cell into view so lattice edits are always visible.
+  auto norm3 = [](const float v[3]) -> float {
+    return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+  };
   
   // Compute lattice vectors in display space
-  float a1[3] = { static_cast<float>(lattice_.a1[0]) * s, 
-                  static_cast<float>(lattice_.a1[1]) * s, 
-                  static_cast<float>(lattice_.a1[2]) * s };
-  float a2[3] = { static_cast<float>(lattice_.a2[0]) * s, 
-                  static_cast<float>(lattice_.a2[1]) * s, 
-                  static_cast<float>(lattice_.a2[2]) * s };
-  float a3[3] = { static_cast<float>(lattice_.a3[0]) * s, 
-                  static_cast<float>(lattice_.a3[1]) * s, 
-                  static_cast<float>(lattice_.a3[2]) * s };
+  float a1_raw[3] = { static_cast<float>(lattice_.a1[0]),
+                      static_cast<float>(lattice_.a1[1]),
+                      static_cast<float>(lattice_.a1[2]) };
+  float a2_raw[3] = { static_cast<float>(lattice_.a2[0]),
+                      static_cast<float>(lattice_.a2[1]),
+                      static_cast<float>(lattice_.a2[2]) };
+  float a3_raw[3] = { static_cast<float>(lattice_.a3[0]),
+                      static_cast<float>(lattice_.a3[1]),
+                      static_cast<float>(lattice_.a3[2]) };
   
   // Define unit cell vertices
   float o[3]    = {0.0f, 0.0f, 0.0f};
-  float p1[3]   = {a1[0], a1[1], a1[2]};
-  float p2[3]   = {a2[0], a2[1], a2[2]};
-  float p3[3]   = {a3[0], a3[1], a3[2]};
-  float p12[3]  = {a1[0]+a2[0], a1[1]+a2[1], a1[2]+a2[2]};
-  float p13[3]  = {a1[0]+a3[0], a1[1]+a3[1], a1[2]+a3[2]};
-  float p23[3]  = {a2[0]+a3[0], a2[1]+a3[1], a2[2]+a3[2]};
-  float p123[3] = {a1[0]+a2[0]+a3[0], a1[1]+a2[1]+a3[1], a1[2]+a2[2]+a3[2]};
+  float p1_raw[3]   = {a1_raw[0], a1_raw[1], a1_raw[2]};
+  float p2_raw[3]   = {a2_raw[0], a2_raw[1], a2_raw[2]};
+  float p3_raw[3]   = {a3_raw[0], a3_raw[1], a3_raw[2]};
+  float p12_raw[3]  = {a1_raw[0]+a2_raw[0], a1_raw[1]+a2_raw[1], a1_raw[2]+a2_raw[2]};
+  float p13_raw[3]  = {a1_raw[0]+a3_raw[0], a1_raw[1]+a3_raw[1], a1_raw[2]+a3_raw[2]};
+  float p23_raw[3]  = {a2_raw[0]+a3_raw[0], a2_raw[1]+a3_raw[1], a2_raw[2]+a3_raw[2]};
+  float p123_raw[3] = {a1_raw[0]+a2_raw[0]+a3_raw[0], a1_raw[1]+a2_raw[1]+a3_raw[1], a1_raw[2]+a2_raw[2]+a3_raw[2]};
 
-  // Draw unit cell edges with slightly brighter color for visibility
-  glColor3f(0.75f, 0.75f, 0.85f);
+  float max_norm = std::max({norm3(p1_raw), norm3(p2_raw), norm3(p3_raw),
+                             norm3(p12_raw), norm3(p13_raw), norm3(p23_raw), norm3(p123_raw)});
+  if (!std::isfinite(max_norm) || max_norm <= 1e-12f) {
+    max_norm = 1.0f;
+  }
+  const float fit = 1.2f / max_norm;
+  const float activity_pulse = sim_running_
+                                 ? (0.94f + 0.06f * std::sin(static_cast<float>(sim_time_ * 1e15 * 0.2)))
+                                 : 1.0f;
+  const float s = fit * activity_pulse;
+
+  float p1[3]   = {p1_raw[0] * s, p1_raw[1] * s, p1_raw[2] * s};
+  float p2[3]   = {p2_raw[0] * s, p2_raw[1] * s, p2_raw[2] * s};
+  float p3[3]   = {p3_raw[0] * s, p3_raw[1] * s, p3_raw[2] * s};
+  float p12[3]  = {p12_raw[0] * s, p12_raw[1] * s, p12_raw[2] * s};
+  float p13[3]  = {p13_raw[0] * s, p13_raw[1] * s, p13_raw[2] * s};
+  float p23[3]  = {p23_raw[0] * s, p23_raw[1] * s, p23_raw[2] * s};
+  float p123[3] = {p123_raw[0] * s, p123_raw[1] * s, p123_raw[2] * s};
+
+  // Draw unit cell edges; color warms up as simulation progresses.
+  float progress = 0.0f;
+  if (sim_end_time_ > 0.0 && std::isfinite(sim_time_)) {
+    progress = static_cast<float>(std::min(std::max(sim_time_ / sim_end_time_, 0.0), 1.0));
+  }
+  const float step_glint = sim_running_ ? (0.02f * static_cast<float>(sim_step_count_ % 10)) : 0.0f;
+  const float edge_r = std::min(1.0f, 0.72f + 0.20f * progress + step_glint);
+  const float edge_g = 0.74f - 0.18f * progress;
+  const float edge_b = 0.88f - 0.28f * progress;
+  glColor3f(edge_r, edge_g, edge_b);
   glLineWidth(1.5f);
   glBegin(GL_LINES);
   #define E(A,B) glVertex3fv(A); glVertex3fv(B);
@@ -253,30 +321,49 @@ void View3D::draw_particles() {
     return;
   }
 
-  // Use a safe scale for particle positions
-  float s = 1.0f;
-  if (std::isfinite(scale_) && scale_ > 0.0) {
-    s = static_cast<float>(std::min(std::max(scale_, 1e-6), 1e6));
+  float min_p[3] = { std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max() };
+  float max_p[3] = { -std::numeric_limits<float>::max(),
+                     -std::numeric_limits<float>::max(),
+                     -std::numeric_limits<float>::max() };
+  for (std::size_t i = 0; i < particle_system_->size(); ++i) {
+    const auto& p = (*particle_system_)[i];
+    if (!std::isfinite(p.pos[0]) || !std::isfinite(p.pos[1]) || !std::isfinite(p.pos[2])) continue;
+    const float px = static_cast<float>(p.pos[0]);
+    const float py = static_cast<float>(p.pos[1]);
+    const float pz = static_cast<float>(p.pos[2]);
+    min_p[0] = std::min(min_p[0], px); min_p[1] = std::min(min_p[1], py); min_p[2] = std::min(min_p[2], pz);
+    max_p[0] = std::max(max_p[0], px); max_p[1] = std::max(max_p[1], py); max_p[2] = std::max(max_p[2], pz);
   }
 
-  // Draw particles as small spheres (approximated by points for now)
-  // Use a bright color for particles
-  const float particle_color[3] = {1.0f, 0.8f, 0.2f};  // Golden yellow
+  const float cx = 0.5f * (min_p[0] + max_p[0]);
+  const float cy = 0.5f * (min_p[1] + max_p[1]);
+  const float cz = 0.5f * (min_p[2] + max_p[2]);
+  const float span_x = max_p[0] - min_p[0];
+  const float span_y = max_p[1] - min_p[1];
+  const float span_z = max_p[2] - min_p[2];
+  float span = std::max({span_x, span_y, span_z});
+  if (!std::isfinite(span) || span < 1e-12f) span = 1.0f;
+  const float s = 1.8f / span;
 
-  // Enable point smoothing for rounder particles
+  // Draw particles as small spheres (approximated by points for now)
+  // Draw points larger so dynamics are obvious.
   glEnable(GL_POINT_SMOOTH);
-  glPointSize(std::max(2.0f, particle_radius_ * 50.0f));  // Scale point size
+  glPointSize(std::max(4.0f, particle_radius_ * 90.0f));
 
   glBegin(GL_POINTS);
-  glColor3fv(particle_color);
 
   for (std::size_t i = 0; i < particle_system_->size(); ++i) {
     const auto& p = (*particle_system_)[i];
-    // Check for finite positions
     if (std::isfinite(p.pos[0]) && std::isfinite(p.pos[1]) && std::isfinite(p.pos[2])) {
-      float px = static_cast<float>(p.pos[0]) * s;
-      float py = static_cast<float>(p.pos[1]) * s;
-      float pz = static_cast<float>(p.pos[2]) * s;
+      const float speed = static_cast<float>(std::sqrt(
+          p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] + p.vel[2] * p.vel[2]));
+      const float heat = std::min(1.0f, speed / 250.0f);
+      glColor3f(0.25f + 0.75f * heat, 0.85f - 0.55f * heat, 1.0f - 0.75f * heat);
+      float px = (static_cast<float>(p.pos[0]) - cx) * s;
+      float py = (static_cast<float>(p.pos[1]) - cy) * s;
+      float pz = (static_cast<float>(p.pos[2]) - cz) * s;
       glVertex3f(px, py, pz);
     }
   }
@@ -289,15 +376,135 @@ void View3D::draw_particles() {
     for (std::size_t i = 0; i < particle_system_->size(); ++i) {
       const auto& p = (*particle_system_)[i];
       if (std::isfinite(p.pos[0]) && std::isfinite(p.pos[1]) && std::isfinite(p.pos[2])) {
+        const float speed = static_cast<float>(std::sqrt(
+            p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] + p.vel[2] * p.vel[2]));
+        const float heat = std::min(1.0f, speed / 250.0f);
+        const float particle_color[3] = {0.25f + 0.75f * heat, 0.85f - 0.55f * heat, 1.0f - 0.75f * heat};
         float pos[3] = {
-          static_cast<float>(p.pos[0]) * s,
-          static_cast<float>(p.pos[1]) * s,
-          static_cast<float>(p.pos[2]) * s
+          (static_cast<float>(p.pos[0]) - cx) * s,
+          (static_cast<float>(p.pos[1]) - cy) * s,
+          (static_cast<float>(p.pos[2]) - cz) * s
         };
-        draw_particle_sphere(pos, particle_radius_ * s, particle_color);
+        draw_particle_sphere(pos, std::max(0.01f, particle_radius_ * 0.12f), particle_color);
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Thermal colormap: dark blue-black → purple → crimson → orange → gold → bright
+// Inspired by matplotlib "inferno"; 6-point piecewise-linear interpolation.
+// Input t ∈ [0,1];  output r, g, b ∈ [0,1].
+// ---------------------------------------------------------------------------
+void View3D::colormap_thermal(float t, float& r, float& g, float& b) {
+    // Clamp input.
+    t = std::max(0.0f, std::min(1.0f, t));
+
+    // Control points (t, R, G, B).
+    struct CP { float t, r, g, b; };
+    static constexpr CP pts[] = {
+        {0.00f, 0.00f, 0.00f, 0.07f},   // near-black blue
+        {0.20f, 0.27f, 0.004f, 0.43f},   // deep purple
+        {0.40f, 0.65f, 0.12f, 0.42f},    // crimson-magenta
+        {0.60f, 0.91f, 0.35f, 0.15f},    // warm orange
+        {0.80f, 0.98f, 0.72f, 0.07f},    // golden
+        {1.00f, 0.99f, 0.99f, 0.75f},    // bright yellow-white
+    };
+    constexpr int n = static_cast<int>(sizeof(pts) / sizeof(pts[0]));
+
+    // Find segment.
+    int seg = 0;
+    for (int k = 1; k < n; ++k) {
+        if (t <= pts[k].t) { seg = k - 1; break; }
+        seg = k - 1;
+    }
+    const float seg_len = pts[seg + 1].t - pts[seg].t;
+    const float frac = (seg_len > 1e-6f) ? (t - pts[seg].t) / seg_len : 0.0f;
+    r = pts[seg].r + frac * (pts[seg + 1].r - pts[seg].r);
+    g = pts[seg].g + frac * (pts[seg + 1].g - pts[seg].g);
+    b = pts[seg].b + frac * (pts[seg + 1].b - pts[seg].b);
+}
+
+// ---------------------------------------------------------------------------
+// draw_temperature_field: renders the 2D temperature grid as smooth quads.
+//
+// Uses bilinear vertex interpolation for smooth gradients:
+//  - Each vertex (vi,vj) at a cell corner gets the average temperature of
+//    the (up to 4) adjacent cells.
+//  - OpenGL Gouraud shading interpolates within each quad.
+// ---------------------------------------------------------------------------
+void View3D::draw_temperature_field() {
+    if (temp_field_.empty() || temp_nx_ < 3 || temp_ny_ < 3) return;
+
+    const std::size_t nx = temp_nx_;
+    const std::size_t ny = temp_ny_;
+    const float inv_range = (temp_T_hot_ > temp_T_cold_)
+                            ? 1.0f / static_cast<float>(temp_T_hot_ - temp_T_cold_)
+                            : 1.0f;
+    const float T_cold_f = static_cast<float>(temp_T_cold_);
+
+    // Helper: cell temperature (clamped indices).
+    auto cell_T = [&](int ci, int cj) -> float {
+        ci = std::max(0, std::min(ci, static_cast<int>(nx) - 1));
+        cj = std::max(0, std::min(cj, static_cast<int>(ny) - 1));
+        return static_cast<float>(temp_field_[static_cast<std::size_t>(cj) * nx
+                                              + static_cast<std::size_t>(ci)]);
+    };
+
+    // Vertex temperature: average of up to 4 adjacent cells.
+    // Vertex (vi,vj) sits at the corner shared by cells (vi-1,vj-1), (vi,vj-1),
+    //                                                   (vi-1,vj),   (vi,vj).
+    auto vertex_T = [&](int vi, int vj) -> float {
+        // Determine which cells exist around this vertex.
+        const int ci_lo = vi - 1;
+        const int ci_hi = vi;
+        const int cj_lo = vj - 1;
+        const int cj_hi = vj;
+        float sum = 0.0f;
+        int count = 0;
+        if (ci_lo >= 0 && cj_lo >= 0)                                   { sum += cell_T(ci_lo, cj_lo); ++count; }
+        if (ci_hi < static_cast<int>(nx) && cj_lo >= 0)                 { sum += cell_T(ci_hi, cj_lo); ++count; }
+        if (ci_lo >= 0 && cj_hi < static_cast<int>(ny))                 { sum += cell_T(ci_lo, cj_hi); ++count; }
+        if (ci_hi < static_cast<int>(nx) && cj_hi < static_cast<int>(ny)) { sum += cell_T(ci_hi, cj_hi); ++count; }
+        return (count > 0) ? sum / static_cast<float>(count) : T_cold_f;
+    };
+
+    // Map grid to GL coordinates: [-1.0, 1.0] × [-1.0, 1.0] at z = 0.
+    const float cell_w = 2.0f / static_cast<float>(nx);
+    const float cell_h = 2.0f / static_cast<float>(ny);
+
+    glShadeModel(GL_SMOOTH);
+
+    // Draw row-by-row using GL_QUAD_STRIP for efficiency.
+    for (std::size_t j = 0; j < ny; ++j) {
+        glBegin(GL_QUAD_STRIP);
+        for (std::size_t i = 0; i <= nx; ++i) {
+            const int vi = static_cast<int>(i);
+            const float x = -1.0f + static_cast<float>(i) * cell_w;
+
+            // Bottom vertex of this row's strip (vertex row j).
+            {
+                const float y_bot = -1.0f + static_cast<float>(j) * cell_h;
+                const float t = (vertex_T(vi, static_cast<int>(j)) - T_cold_f) * inv_range;
+                float r, g, b;
+                colormap_thermal(t, r, g, b);
+                glColor3f(r, g, b);
+                glVertex3f(x, y_bot, 0.0f);
+            }
+            // Top vertex of this row's strip (vertex row j+1).
+            {
+                const float y_top = -1.0f + static_cast<float>(j + 1) * cell_h;
+                const float t = (vertex_T(vi, static_cast<int>(j) + 1) - T_cold_f) * inv_range;
+                float r, g, b;
+                colormap_thermal(t, r, g, b);
+                glColor3f(r, g, b);
+                glVertex3f(x, y_top, 0.0f);
+            }
+        }
+        glEnd();
+    }
+
+    glShadeModel(GL_FLAT);
 }
 
 void View3D::draw_particle_sphere(const float pos[3], float radius, const float color[3]) {

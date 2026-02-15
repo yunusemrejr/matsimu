@@ -9,6 +9,7 @@
 #include <matsimu/lattice/lattice.hpp>
 #include <matsimu/sim/model.hpp>
 #include <matsimu/sim/heat_diffusion.hpp>
+#include <matsimu/sim/heat_diffusion_2d.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -38,7 +39,7 @@ struct SimulationParams {
 /**
  * Simulation mode: which physics model is active.
  */
-enum class SimMode { MD, HeatDiffusion };
+enum class SimMode { MD, HeatDiffusion, HeatDiffusion2D };
 
 /**
  * Molecular dynamics simulation with full physics engine.
@@ -57,8 +58,11 @@ public:
     Simulation(const SimulationParams& params,
                std::shared_ptr<Potential> potential = nullptr);
 
-    /// Construct heat-diffusion simulation (orchestrates stepping; math in HeatDiffusionModel).
+    /// Construct 1D heat-diffusion simulation (orchestrates stepping; math in HeatDiffusionModel).
     explicit Simulation(const HeatDiffusionParams& heat_params);
+
+    /// Construct 2D heat-diffusion simulation (math in HeatDiffusion2DModel).
+    explicit Simulation(const HeatDiffusion2DParams& heat_2d_params);
 
     /// Check if simulation is valid
     bool is_valid() const;
@@ -110,6 +114,9 @@ public:
     Real total_energy() const { return kinetic_energy() + potential_energy(); }
     Real temperature() const { return system_.temperature(); }
     
+    /// Access the 2D heat model (nullptr if mode != HeatDiffusion2D).
+    const HeatDiffusion2DModel* heat_2d_model() const;
+
     // Callbacks
     using StepCallback = std::function<void(const Simulation&)>;
     void set_step_callback(StepCallback cb) { step_callback_ = std::move(cb); }

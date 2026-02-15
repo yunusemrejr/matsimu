@@ -5,6 +5,7 @@
 #include <QGridLayout>
 #include <QVBoxLayout>
 #include <QMessageBox> // For QMessageBox
+#include <QSignalBlocker>
 
 namespace matsimu {
 
@@ -34,6 +35,15 @@ void LatticeTab::set_lattice(const Lattice& lat) {
 
   lattice_ = lat;
   if (a1_[0]) {
+    const QSignalBlocker b10(a1_[0]);
+    const QSignalBlocker b11(a1_[1]);
+    const QSignalBlocker b12(a1_[2]);
+    const QSignalBlocker b20(a2_[0]);
+    const QSignalBlocker b21(a2_[1]);
+    const QSignalBlocker b22(a2_[2]);
+    const QSignalBlocker b30(a3_[0]);
+    const QSignalBlocker b31(a3_[1]);
+    const QSignalBlocker b32(a3_[2]);
     a1_[0]->setValue(lat.a1[0]);
     a1_[1]->setValue(lat.a1[1]);
     a1_[2]->setValue(lat.a1[2]);
@@ -50,23 +60,34 @@ void LatticeTab::set_lattice(const Lattice& lat) {
 
 void LatticeTab::build_ui() {
   auto* layout = new QVBoxLayout(this);
+  layout->setContentsMargins(20, 20, 20, 20);
+  layout->setSpacing(14);
 
   auto* intro = new QLabel(tr("Define the repeating box (unit cell) for your material. "
-                              "The three vectors a₁, a₂, a₃ span the cell; lengths in metres."), this);
+                              "Imagine a stamp that repeats in 3D: a₁, a₂, a₃ are the three edges of that stamp. "
+                              "Changing them reshapes every repeated cell in the world."), this);
   intro->setWordWrap(true);
-  intro->setStyleSheet("color: #555;");
+  intro->setStyleSheet("color: #d3deea; font-size: 14px;");
   layout->addWidget(intro);
 
-  basis_group_ = new QGroupBox(tr("Basis vectors (m)"), this);
-  basis_group_->setToolTip(tr("Right-handed basis a₁, a₂, a₃. Unit cell volume V = a₁·(a₂×a₃). Advanced: used for periodic boundaries and min-image."));
-  auto* grid = new QGridLayout(basis_group_);
+  auto* preview_hint = new QLabel(
+      tr("Live geometry preview: open the 3D View tab while editing these vectors."), this);
+  preview_hint->setStyleSheet("color: #8ed0ff; font-size: 13px; font-weight: 600;");
+  layout->addWidget(preview_hint);
 
-  auto mk_spin = [this](int row, int col, Real val) {
+  basis_group_ = new QGroupBox(tr("Basis vectors (m)"), this);
+  basis_group_->setToolTip(tr("Right-handed basis vectors. Think width/depth/height arrows for one tile. "
+                              "Volume V = a₁·(a₂×a₃), used for periodic boundaries."));
+  auto* grid = new QGridLayout(basis_group_);
+  grid->setHorizontalSpacing(12);
+  grid->setVerticalSpacing(10);
+
+  auto mk_spin = [this](Real val) {
     auto* s = new QDoubleSpinBox(this);
     s->setRange(-1e6, 1e6);
-    s->setDecimals(6);
+    s->setDecimals(4);
     s->setValue(val);
-    s->setSingleStep(1e-10);
+    s->setSingleStep(1e-2);
     connect(s, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, [this]() { 
               sync_from_ui(); // This now performs validation and emits if valid
@@ -74,37 +95,46 @@ void LatticeTab::build_ui() {
     return s;
   };
 
-  grid->addWidget(new QLabel(tr("a₁:")), 0, 0);
-  a1_[0] = mk_spin(0, 1, 1);
-  a1_[1] = mk_spin(0, 2, 0);
-  a1_[2] = mk_spin(0, 3, 0);
-  grid->addWidget(a1_[0], 0, 1);
-  grid->addWidget(a1_[1], 0, 2);
-  grid->addWidget(a1_[2], 0, 3);
+  auto* lbl_x = new QLabel(tr("X"), this);
+  auto* lbl_y = new QLabel(tr("Y"), this);
+  auto* lbl_z = new QLabel(tr("Z"), this);
+  lbl_x->setStyleSheet("font-weight:700; color:#8ed0ff;");
+  lbl_y->setStyleSheet("font-weight:700; color:#8ed0ff;");
+  lbl_z->setStyleSheet("font-weight:700; color:#8ed0ff;");
+  grid->addWidget(lbl_x, 0, 1);
+  grid->addWidget(lbl_y, 0, 2);
+  grid->addWidget(lbl_z, 0, 3);
 
-  grid->addWidget(new QLabel(tr("a₂:")), 1, 0);
-  a2_[0] = mk_spin(1, 1, 0);
-  a2_[1] = mk_spin(1, 2, 1);
-  a2_[2] = mk_spin(1, 3, 0);
-  grid->addWidget(a2_[0], 1, 1);
-  grid->addWidget(a2_[1], 1, 2);
-  grid->addWidget(a2_[2], 1, 3);
+  grid->addWidget(new QLabel(tr("Lattice Vector 1")), 1, 0);
+  a1_[0] = mk_spin(1);
+  a1_[1] = mk_spin(0);
+  a1_[2] = mk_spin(0);
+  grid->addWidget(a1_[0], 1, 1);
+  grid->addWidget(a1_[1], 1, 2);
+  grid->addWidget(a1_[2], 1, 3);
 
-  grid->addWidget(new QLabel(tr("a₃:")), 2, 0);
-  a3_[0] = mk_spin(2, 1, 0);
-  a3_[1] = mk_spin(2, 2, 0);
-  a3_[2] = mk_spin(2, 3, 1);
-  grid->addWidget(a3_[0], 2, 1);
-  grid->addWidget(a3_[1], 2, 2);
-  grid->addWidget(a3_[2], 2, 3);
+  grid->addWidget(new QLabel(tr("Lattice Vector 2")), 2, 0);
+  a2_[0] = mk_spin(0);
+  a2_[1] = mk_spin(1);
+  a2_[2] = mk_spin(0);
+  grid->addWidget(a2_[0], 2, 1);
+  grid->addWidget(a2_[1], 2, 2);
+  grid->addWidget(a2_[2], 2, 3);
+
+  grid->addWidget(new QLabel(tr("Lattice Vector 3")), 3, 0);
+  a3_[0] = mk_spin(0);
+  a3_[1] = mk_spin(0);
+  a3_[2] = mk_spin(1);
+  grid->addWidget(a3_[0], 3, 1);
+  grid->addWidget(a3_[1], 3, 2);
+  grid->addWidget(a3_[2], 3, 3);
 
   layout->addWidget(basis_group_);
 
-  label_volume_ = new QLabel(tr("Volume: — m³"), this);
-  label_volume_->setToolTip(tr("Unit cell volume in m³."));
+  label_volume_ = new QLabel(tr("Cell volume: — m³"), this);
+  label_volume_->setStyleSheet("color:#8ed0ff; font-weight:700; font-size:14px;");
+  label_volume_->setToolTip(tr("Unit-cell volume: how much 3D space one repeating tile occupies."));
   layout->addWidget(label_volume_);
-
-  layout->addStretch();
 }
 
 void LatticeTab::assign_spinbox_values_to_vector(Real target_array[3], QDoubleSpinBox* spinboxes[3]) {
@@ -123,10 +153,10 @@ void LatticeTab::sync_from_ui() {
 
   auto validation_error = current_input_lattice.validate();
   if (validation_error) {
-    QMessageBox::warning(this, tr("Invalid Lattice Input"),
-                         tr("Please correct the lattice vectors: %1").arg(QString::fromStdString(*validation_error)));
-    // Do not update internal lattice_ or emit signal
-    // The UI still shows the invalid input, but internal state and 3D view are not updated.
+    if (label_volume_) {
+      label_volume_->setText(tr("Cell volume: invalid (%1)").arg(QString::fromStdString(*validation_error)));
+    }
+    // Do not update internal lattice_ or emit signal while current edit is invalid.
     return;
   }
   
@@ -142,9 +172,10 @@ void LatticeTab::update_volume_label() {
   if (label_volume_) {
     auto validation_error = lattice_.validate();
     if (validation_error) {
-       label_volume_->setText(tr("Volume: Invalid (error: %1)").arg(QString::fromStdString(*validation_error)));
+       label_volume_->setText(tr("Cell volume: invalid (%1)").arg(QString::fromStdString(*validation_error)));
     } else {
-       label_volume_->setText(tr("Volume: %1 m³").arg(lattice_.volume(), 0, 'g', 6));
+       label_volume_->setText(tr("Cell volume: %1 m³ (space in one repeating tile)")
+                                .arg(lattice_.volume(), 0, 'e', 4));
     }
   }
 }

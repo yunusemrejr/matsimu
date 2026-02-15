@@ -53,6 +53,21 @@ Simulation::Simulation(const HeatDiffusionParams& heat_params)
         error_msg_ = model_->error_message();
 }
 
+Simulation::Simulation(const HeatDiffusion2DParams& heat_2d_params)
+    : mode_(SimMode::HeatDiffusion2D), params_(), time_(0), step_count_(0), valid_(false) {
+    model_ = std::make_unique<HeatDiffusion2DModel>(heat_2d_params);
+    valid_ = model_->is_valid();
+    if (!valid_)
+        error_msg_ = model_->error_message();
+}
+
+const HeatDiffusion2DModel* Simulation::heat_2d_model() const {
+    if (mode_ != SimMode::HeatDiffusion2D || !model_) return nullptr;
+    // Safe: the only code path that sets mode_ to HeatDiffusion2D
+    // creates a HeatDiffusion2DModel, so the cast is valid.
+    return static_cast<const HeatDiffusion2DModel*>(model_.get());
+}
+
 void Simulation::set_potential(std::shared_ptr<Potential> pot) {
     if (params_.use_neighbor_list) {
         neighbor_force_field_ = std::make_unique<NeighborForceField>(

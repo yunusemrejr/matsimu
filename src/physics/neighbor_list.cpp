@@ -71,16 +71,8 @@ Real NeighborList::distance_sq(const Particle& p1, const Particle& p2,
     dx[2] = p2.pos[2] - p1.pos[2];
     
     if (lattice) {
-        Real frac[3];
-        frac[0] = dx[0] / lattice->a1[0];
-        frac[1] = dx[1] / lattice->a2[1];
-        frac[2] = dx[2] / lattice->a3[2];
-        
-        lattice->min_image_frac(frac);
-        
-        dx[0] = frac[0] * lattice->a1[0];
-        dx[1] = frac[1] * lattice->a2[1];
-        dx[2] = frac[2] * lattice->a3[2];
+        // Use lattice's general min-image displacement (correct for all lattice types).
+        lattice->min_image_displacement(p1.pos, p2.pos, dx);
     }
     
     return dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2];

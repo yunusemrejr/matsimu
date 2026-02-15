@@ -58,10 +58,11 @@ Real HarmonicPotential::force_div_r(Real r2) const {
     if (r2 >= cutoff_sq_) return 0.0;
     
     Real r = std::sqrt(r2);
+    if (r < 1e-30) return 0.0;  // Avoid singularity at r=0
     Real dr = r - r0_;
     // F = -k*(r-r0) * (r_vec/r)
     // F/r = -k*(r-r0)/r
-    return -k_ * dr / r2;
+    return -k_ * dr / r;
 }
 
 // ForceField implementation
