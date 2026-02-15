@@ -78,7 +78,7 @@ class View3D : public QOpenGLWidget, protected QOpenGLFunctions {
    Lattice lattice_;
    std::shared_ptr<const ParticleSystem> particle_system_;
    Real scale_{1.0};   // display scale: lattice (m) * scale_ = GL coords
-   float particle_radius_{0.05f};
+   float particle_radius_{0.08f};
    bool show_particles_{true};
    bool show_lattice_{true};
    bool sim_running_{false};

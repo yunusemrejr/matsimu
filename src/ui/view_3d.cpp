@@ -321,6 +321,7 @@ void View3D::draw_particles() {
     return;
   }
 
+  // Compute bounding box of all finite-position particles
   float min_p[3] = { std::numeric_limits<float>::max(),
                      std::numeric_limits<float>::max(),
                      std::numeric_limits<float>::max() };
@@ -347,13 +348,64 @@ void View3D::draw_particles() {
   if (!std::isfinite(span) || span < 1e-12f) span = 1.0f;
   const float s = 1.8f / span;
 
-  // Draw particles as small spheres (approximated by points for now)
-  // Draw points larger so dynamics are obvious.
+  // --- Draw simulation box (lattice cell) in particle coordinate space ---
+  if (show_lattice_ && std::fabs(lattice_.volume()) > 1e-30) {
+    auto to_view = [cx, cy, cz, s](float x, float y, float z, float out[3]) {
+      out[0] = (x - cx) * s;
+      out[1] = (y - cy) * s;
+      out[2] = (z - cz) * s;
+    };
+    const float la1[3] = { static_cast<float>(lattice_.a1[0]),
+                           static_cast<float>(lattice_.a1[1]),
+                           static_cast<float>(lattice_.a1[2]) };
+    const float la2[3] = { static_cast<float>(lattice_.a2[0]),
+                           static_cast<float>(lattice_.a2[1]),
+                           static_cast<float>(lattice_.a2[2]) };
+    const float la3[3] = { static_cast<float>(lattice_.a3[0]),
+                           static_cast<float>(lattice_.a3[1]),
+                           static_cast<float>(lattice_.a3[2]) };
+
+    // 8 corners of the parallelepiped, transformed to particle view coordinates
+    float v[8][3];
+    to_view(0, 0, 0, v[0]);
+    to_view(la1[0], la1[1], la1[2], v[1]);
+    to_view(la2[0], la2[1], la2[2], v[2]);
+    to_view(la3[0], la3[1], la3[2], v[3]);
+    to_view(la1[0]+la2[0], la1[1]+la2[1], la1[2]+la2[2], v[4]);
+    to_view(la1[0]+la3[0], la1[1]+la3[1], la1[2]+la3[2], v[5]);
+    to_view(la2[0]+la3[0], la2[1]+la3[1], la2[2]+la3[2], v[6]);
+    to_view(la1[0]+la2[0]+la3[0], la1[1]+la2[1]+la3[1], la1[2]+la2[2]+la3[2], v[7]);
+
+    glColor3f(0.35f, 0.55f, 0.78f);
+    glLineWidth(1.5f);
+    glBegin(GL_LINES);
+    // 12 edges of parallelepiped
+    // From origin
+    glVertex3fv(v[0]); glVertex3fv(v[1]);
+    glVertex3fv(v[0]); glVertex3fv(v[2]);
+    glVertex3fv(v[0]); glVertex3fv(v[3]);
+    // From a1
+    glVertex3fv(v[1]); glVertex3fv(v[4]);
+    glVertex3fv(v[1]); glVertex3fv(v[5]);
+    // From a2
+    glVertex3fv(v[2]); glVertex3fv(v[4]);
+    glVertex3fv(v[2]); glVertex3fv(v[6]);
+    // From a3
+    glVertex3fv(v[3]); glVertex3fv(v[5]);
+    glVertex3fv(v[3]); glVertex3fv(v[6]);
+    // Top edges
+    glVertex3fv(v[4]); glVertex3fv(v[7]);
+    glVertex3fv(v[5]); glVertex3fv(v[7]);
+    glVertex3fv(v[6]); glVertex3fv(v[7]);
+    glEnd();
+    glLineWidth(1.0f);
+  }
+
+  // --- Draw particles as color-coded points ---
   glEnable(GL_POINT_SMOOTH);
-  glPointSize(std::max(4.0f, particle_radius_ * 90.0f));
+  glPointSize(std::max(5.0f, particle_radius_ * 120.0f));
 
   glBegin(GL_POINTS);
-
   for (std::size_t i = 0; i < particle_system_->size(); ++i) {
     const auto& p = (*particle_system_)[i];
     if (std::isfinite(p.pos[0]) && std::isfinite(p.pos[1]) && std::isfinite(p.pos[2])) {
@@ -361,32 +413,30 @@ void View3D::draw_particles() {
           p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] + p.vel[2] * p.vel[2]));
       const float heat = std::min(1.0f, speed / 250.0f);
       glColor3f(0.25f + 0.75f * heat, 0.85f - 0.55f * heat, 1.0f - 0.75f * heat);
-      float px = (static_cast<float>(p.pos[0]) - cx) * s;
-      float py = (static_cast<float>(p.pos[1]) - cy) * s;
-      float pz = (static_cast<float>(p.pos[2]) - cz) * s;
+      const float px = (static_cast<float>(p.pos[0]) - cx) * s;
+      const float py = (static_cast<float>(p.pos[1]) - cy) * s;
+      const float pz = (static_cast<float>(p.pos[2]) - cz) * s;
       glVertex3f(px, py, pz);
     }
   }
-
   glEnd();
   glDisable(GL_POINT_SMOOTH);
 
-  // For larger particle radii, draw wireframe spheres
-  if (particle_radius_ > 0.02f) {
-    for (std::size_t i = 0; i < particle_system_->size(); ++i) {
-      const auto& p = (*particle_system_)[i];
-      if (std::isfinite(p.pos[0]) && std::isfinite(p.pos[1]) && std::isfinite(p.pos[2])) {
-        const float speed = static_cast<float>(std::sqrt(
-            p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] + p.vel[2] * p.vel[2]));
-        const float heat = std::min(1.0f, speed / 250.0f);
-        const float particle_color[3] = {0.25f + 0.75f * heat, 0.85f - 0.55f * heat, 1.0f - 0.75f * heat};
-        float pos[3] = {
-          (static_cast<float>(p.pos[0]) - cx) * s,
-          (static_cast<float>(p.pos[1]) - cy) * s,
-          (static_cast<float>(p.pos[2]) - cz) * s
-        };
-        draw_particle_sphere(pos, std::max(0.01f, particle_radius_ * 0.12f), particle_color);
-      }
+  // --- Draw wireframe spheres for 3D depth perception ---
+  const float sphere_r = std::max(0.015f, particle_radius_ * 0.35f);
+  for (std::size_t i = 0; i < particle_system_->size(); ++i) {
+    const auto& p = (*particle_system_)[i];
+    if (std::isfinite(p.pos[0]) && std::isfinite(p.pos[1]) && std::isfinite(p.pos[2])) {
+      const float speed = static_cast<float>(std::sqrt(
+          p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] + p.vel[2] * p.vel[2]));
+      const float heat = std::min(1.0f, speed / 250.0f);
+      const float particle_color[3] = {0.25f + 0.75f * heat, 0.85f - 0.55f * heat, 1.0f - 0.75f * heat};
+      float pos[3] = {
+        (static_cast<float>(p.pos[0]) - cx) * s,
+        (static_cast<float>(p.pos[1]) - cy) * s,
+        (static_cast<float>(p.pos[2]) - cz) * s
+      };
+      draw_particle_sphere(pos, sphere_r, particle_color);
     }
   }
 }

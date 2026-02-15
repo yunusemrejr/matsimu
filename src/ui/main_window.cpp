@@ -265,7 +265,18 @@ void MainWindow::on_simulation_timer() {
   if (impl_->sim_elapsed.hasExpired(50)) {  // Update every 50ms
     const Real t = impl_->simulation->time();
     impl_->sim_tab->set_time(t);
-    impl_->view3d_tab->set_particles(impl_->simulation->system());
+
+    if (impl_->simulation->mode() == SimMode::HeatDiffusion2D) {
+      const auto* model = impl_->simulation->heat_2d_model();
+      if (model) {
+        impl_->view3d_tab->set_temperature_field(
+            model->temperature(), model->nx(), model->ny(),
+            model->T_cold(), model->T_hot());
+      }
+    } else {
+      impl_->view3d_tab->set_particles(impl_->simulation->system());
+    }
+
     impl_->view3d_tab->set_simulation_state(true, t, impl_->simulation->params().end_time,
                                             impl_->simulation->step_count());
     impl_->sim_elapsed.restart();
@@ -286,7 +297,18 @@ void MainWindow::finish_simulation() {
 
   impl_->sim_tab->set_time(final_time);
   impl_->sim_tab->set_running(false);
-  impl_->view3d_tab->set_particles(impl_->simulation->system());
+
+  if (impl_->simulation->mode() == SimMode::HeatDiffusion2D) {
+    const auto* model = impl_->simulation->heat_2d_model();
+    if (model) {
+      impl_->view3d_tab->set_temperature_field(
+          model->temperature(), model->nx(), model->ny(),
+          model->T_cold(), model->T_hot());
+    }
+  } else {
+    impl_->view3d_tab->set_particles(impl_->simulation->system());
+  }
+
   impl_->view3d_tab->set_simulation_state(false, final_time,
                                           impl_->simulation->params().end_time,
                                           impl_->simulation->step_count());
@@ -422,6 +444,50 @@ void MainWindow::on_run() {
 void MainWindow::on_run_example(const QString& example_id) {
   on_stop();
 
+  // Clear both visual modes before setting up new example.
+  impl_->view3d_tab->clear_particles();
+  impl_->view3d_tab->clear_temperature_field();
+
+  // -----------------------------------------------------------------------
+  // Heat diffusion examples (2D continuum, grid-based)
+  // -----------------------------------------------------------------------
+  if (example_id == "heat_hot_center" || example_id == "heat_quench") {
+    const auto heat_params = (example_id == "heat_hot_center")
+                                 ? make_heat_hot_center_params()
+                                 : make_heat_quench_params();
+    impl_->simulation = std::make_unique<matsimu::Simulation>(heat_params);
+    if (!impl_->simulation->is_valid()) {
+      update_status(tr("Error: %1").arg(
+          QString::fromStdString(impl_->simulation->error_message())));
+      impl_->simulation.reset();
+      return;
+    }
+
+    // Show initial temperature field immediately.
+    const auto* model = impl_->simulation->heat_2d_model();
+    if (model) {
+      impl_->view3d_tab->set_temperature_field(
+          model->temperature(), model->nx(), model->ny(),
+          model->T_cold(), model->T_hot());
+    }
+
+    impl_->sim_tab->set_running(true);
+    impl_->sim_tab->set_time(0.0);
+    impl_->view3d_tab->set_simulation_state(true, 0.0, 0.0, 0);
+    impl_->sim_elapsed.start();
+
+    const QString label = (example_id == "heat_hot_center")
+                              ? tr("Heat Diffusion: Hot Center (copper)")
+                              : tr("Heat Diffusion: Quenching (steel)");
+    update_status(tr("Running: %1 — press Stop to end.").arg(label));
+    if (impl_->tabs) impl_->tabs->setCurrentWidget(impl_->view3d_tab);
+    impl_->sim_timer.start();
+    return;
+  }
+
+  // -----------------------------------------------------------------------
+  // Particle-based examples (molecular dynamics)
+  // -----------------------------------------------------------------------
   matsimu::SimulationParams params;
   params.dx = 1e-9;
   params.end_time = 0.0;
@@ -460,11 +526,12 @@ void MainWindow::on_run_example(const QString& example_id) {
                                           impl_->simulation->params().end_time,
                                           impl_->simulation->step_count());
   impl_->sim_elapsed.start();
-  update_status(tr("Running one-click example: %1 (press Stop to end).")
-                    .arg(example_id == "thermal_shock" ? tr("Thermal Shock") : tr("Argon Crystal")));
-  if (impl_->tabs) {
-    impl_->tabs->setCurrentWidget(impl_->view3d_tab);
-  }
+
+  const QString label = (example_id == "thermal_shock")
+                            ? tr("Thermal Shock (colliding clusters)")
+                            : tr("Argon Crystal Relaxation");
+  update_status(tr("Running: %1 — press Stop to end.").arg(label));
+  if (impl_->tabs) impl_->tabs->setCurrentWidget(impl_->view3d_tab);
   impl_->sim_timer.start();
 }
 
@@ -476,7 +543,19 @@ void MainWindow::on_stop() {
   if (impl_->simulation) {
     const Real t = impl_->simulation->time();
     impl_->sim_tab->set_time(t);
-    impl_->view3d_tab->set_particles(impl_->simulation->system());
+
+    // Final visual update: show last state of whichever mode was active.
+    if (impl_->simulation->mode() == SimMode::HeatDiffusion2D) {
+      const auto* model = impl_->simulation->heat_2d_model();
+      if (model) {
+        impl_->view3d_tab->set_temperature_field(
+            model->temperature(), model->nx(), model->ny(),
+            model->T_cold(), model->T_hot());
+      }
+    } else {
+      impl_->view3d_tab->set_particles(impl_->simulation->system());
+    }
+
     impl_->view3d_tab->set_simulation_state(false, t,
                                             impl_->simulation->params().end_time,
                                             impl_->simulation->step_count());
@@ -495,6 +574,7 @@ void MainWindow::on_reset() {
   
   impl_->sim_tab->set_time(0);
   impl_->view3d_tab->clear_particles();
+  impl_->view3d_tab->clear_temperature_field();
   impl_->view3d_tab->set_simulation_state(false, 0.0, 0.0, 0);
   update_status(tr("Reset."));
 }

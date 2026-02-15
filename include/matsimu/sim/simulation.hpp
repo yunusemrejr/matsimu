@@ -76,6 +76,11 @@ public:
     /// Run simulation to completion
     void run();
 
+    /// Initialize MD: zero COM velocity, compute initial forces.
+    /// Must be called after adding particles and setting potential,
+    /// before the first step() call for correct Velocity Verlet startup.
+    void initialize();
+
     /// Check if finished
     bool finished() const;
 
@@ -143,7 +148,6 @@ private:
     Real last_epot_{0.0};
     StepCallback step_callback_;
 
-    void initialize();
     void compute_forces();
 };
 
