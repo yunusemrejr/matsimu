@@ -384,6 +384,16 @@ matsimu/
 2. Wire it up in `src/main.cpp` by adding another `if` branch.
 3. Run it with `./run.sh --example my_example`.
 
+### Merge strategy for configs
+
+To keep local config overrides when pulling (merge conflicts in config files resolve to our version), set the merge driver once:
+
+```bash
+git config merge.ours.driver true
+```
+
+`.gitattributes` marks config-related paths to use this driver.
+
 ---
 
 ## 📖 Glossary
