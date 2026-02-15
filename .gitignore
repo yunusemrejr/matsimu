@@ -3,6 +3,8 @@
 
 # IDE / editor
 .idea/
+.cursor/
+.claude/
 *.swp
 *.swo
 *~
