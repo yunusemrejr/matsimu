@@ -325,7 +325,7 @@ void MainWindow::on_simulation_timer() {
                                           impl_->simulation->step_count());
   impl_->sim_elapsed.restart();
 }
-
+ 
 void MainWindow::finish_simulation() {
   impl_->sim_timer.stop();
   
